@@ -1,19 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
-# %load path_optimizer.py
-#!/usr/bin/env python3
-
-# This work is licensed under the terms of the MIT license.
-# For a copy, see <https://opensource.org/licenses/MIT>.
-
-# Author: Ryan De Iaco
-# Additional Comments: Carlos Wang
-# Date: October 29, 2018
-
 import numpy as np
 import scipy.optimize
 import scipy.integrate
@@ -25,14 +12,6 @@ class PathOptimizer:
         self._yf = 0.0
         self._tf = 0.0
 
-    ######################################################
-    ######################################################
-    # MODULE 7: PARAMETER OPTIMIZATION FOR POLYNOMIAL SPIRAL
-    #   Read over the function comments to familiarize yourself with the
-    #   arguments and necessary variables to return. Then follow the TODOs
-    #   (top-down) and use the surrounding comments as a guide.
-    ######################################################
-    ######################################################
     # Sets up the optimization problem to compute a spiral to a given
     # goal point, (xf, yf, tf).
     def optimize_spiral(self, xf, yf, tf):
@@ -60,81 +39,33 @@ class PathOptimizer:
         self._xf = xf
         self._yf = yf
         self._tf = tf
-        # The straight line distance serves as a lower bound on any path's
-        # arc length to the goal.
+
         sf_0 = np.linalg.norm([xf, yf])
-        # The initial variables correspond to a straight line with arc length
-        # sf_0.  Recall that p here is defined as:
-        #    [p1, p2, sf]
-        #, where p1 and p2 are the curvatures at points p1 and p2
-        #, and sf is the final arc length for the spiral.
-        # Since we already set p0 and p4 (being the curvature of
-        # the initial and final points) to be zero.
+ 
         p0 = [0.0, 0.0, sf_0]
 
-        # Here we will set the bounds [lower, upper] for each optimization 
-        # variable.
-        # The first two variables correspond to the curvature 1/3rd of the
-        # way along the path and 2/3rds of the way along the path, respectively.
-        # As a result, their curvature needs to lie within [-0.5, 0.5].
-        # The third variable is the arc length, it has no upper limit, and it
-        # has a lower limit of the straight line arc length.
-        # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-        # ------------------------------------------------------------------
-        bounds = scipy.optimize.Bounds([-0.5, -0.5, sf_0], [0.5, 0.5, np.inf])
-        # ------------------------------------------------------------------
 
-        # Here we will call scipy.optimize.minimize to optimize our spiral.
-        # The objective and gradient are given to you by self.objective, and
-        # self.objective_grad. The bounds are computed above, and the inital
-        # variables for the optimizer are set by p0. You should use the L-BFGS-B
-        # optimization methods.
-        # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-        # ------------------------------------------------------------------
+        bounds = scipy.optimize.Bounds([-0.5, -0.5, sf_0], [0.5, 0.5, np.inf])
+      
+        # variables for the optimizer are set by p0. 
         res = scipy.optimize.minimize(self.objective, p0, method = 'L-BFGS-B', jac = self.objective_grad, bounds = bounds)
-        # ------------------------------------------------------------------
+
 
         spiral = self.sample_spiral(res.x)
         return spiral
 
-    ######################################################
-    ######################################################
-    # MODULE 7: COMPUTE LIST OF THETAS
-    #   Read over the function comments to familiarize yourself with the
-    #   arguments and necessary variables to return. Then follow the TODOs
-    #   (top-down) and use the surrounding comments as a guide.
-    ######################################################
-    ######################################################
+
     # This function computes the theta values for a given list of
     # arc lengths, and spiral parameters a, b, c, d.
-    # Recall that the equation of a cubic spiral is
-    # kappa(s) = a + b*s + c*s^2 + d*s^3
-    # and since theta(s) is the integral of kappa(s) with respect to
-    # arc length, then theta(s) = a*s + b/2*s^2 + c/3*s^3 + d/4*s^4.
-    # Try to vectorize this function using numpy for speed, if you can.
-    # Inputs: a - the first term of kappa(s).
-    #         b - the second term of kappa(s).
-    #         c - the third term of kappa(s).
-    #         d - the fourth term of kappa(s).
+
     def thetaf(self, a, b, c, d, s):
         pass
 
-        # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-        # ------------------------------------------------------------------
         # # Remember that a, b, c, d and s are lists
         # ...
         thetas = [a * x + b * x**2 / 2 + c * x**3 / 3 + d * x**4 / 4 for x in s]
         return thetas
-        # ------------------------------------------------------------------
 
-    ######################################################
-    ######################################################
-    # MODULE 7: SAMPLE SPIRAL PATH
-    #   Read over the function comments to familiarize yourself with the
-    #   arguments and necessary variables to return. Then follow the TODOs
-    #   (top-down) and use the surrounding comments as a guide.
-    ######################################################
-    ######################################################
     # This function samples the spiral along its arc length to generate
     # a discrete set of x, y, and theta points for a path.
     def sample_spiral(self, p):
@@ -167,28 +98,10 @@ class PathOptimizer:
         # to p[4] (final arc length)
         s_points = np.linspace(0.0, p[4])
 
-        # Compute the theta, x, and y points from the uniformly sampled
-        # arc length points s_points (p[4] is the spiral arc length).
-        # Use self.thetaf() to compute the theta values from the s values.
-        # Recall that x = integral cos(theta(s)) ds and
-        #             y = integral sin(theta(s)) ds.
-        # You will find the scipy.integrate.cumtrapz() function useful.
-        # Try to vectorize the code using numpy functions for speed if you can.
-
-        # Try to vectorize the code using numpy functions for speed if you can.
-        # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-        # ------------------------------------------------------------------
         t_points = self.thetaf(a, b, c, d, s_points)
         x_points = scipy.integrate.cumtrapz(np.cos(t_points), s_points, initial=0.0)
         y_points = scipy.integrate.cumtrapz(np.sin(t_points), s_points, initial=0.0)
         return [x_points, y_points, t_points]
-        # ------------------------------------------------------------------
-
-    ######################################################
-    ######################################################
-    # BELOW ARE THE FUNCTIONS USED FOR THE OPTIMIZER.
-    ######################################################
-    ######################################################
 
     def objective(self, p):
         """

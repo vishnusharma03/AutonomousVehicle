@@ -7,6 +7,7 @@ import time
 import cv2
 import socket
 import argparse
+import weakref
 import numpy as np
 import multiprocessing
 from generate_visuals import visualize  
@@ -286,6 +287,7 @@ def connect_client(host, port, timeout=30.0):
     """Connect to CARLA server if not already connected."""
     try:
         client = carla.Client(host, port)
+        print("client connected!")
         return client
     except (socket.timeout, RuntimeError):
         raise RuntimeError(f"Unable to connect to CARLA at {host}:{port}")
@@ -304,9 +306,9 @@ def get_or_create_tm(client, tm_port):
 # --- Utility functions ---
 
 
-def cleanup_all_actors(client):
+def cleanup_all_actors(client, world):
     """Destroy all vehicles and sensors in the world."""
-    world = client.get_world()
+    # world = client.get_world()
     all_actors = world.get_actors()
     targets = list(all_actors.filter('vehicle.*')) + list(all_actors.filter('sensor.*'))
     if targets:
@@ -316,23 +318,33 @@ def cleanup_all_actors(client):
 
 # --- Core simulation logic ---
 def run_episode(args):
+    client = connect_client(args.host, args.port)
+    world = client.get_world()
+    if world is None:
+        world = client.load_world('Town10HD_Opt')
+        if world is None:
+            raise RuntimeError("Failed to get the world!")
+    cleanup_all_actors(client, world)
+    tm = get_or_create_tm(client, args.tm_port)
     """Run a single CARLA episode with proper cleanup in finally."""
+    pygame.init()
+    screen = pygame.display.set_mode((args.width, args.height))
+    pygame.display.set_caption("CARLA Vehicle Simulation")
+    clock = pygame.time.Clock()
+
     client = None
     tm = None
     sync = True
+    vehicle = None
 
     try:
-        # Connect and setup
-        client = connect_client(args.host, args.port)
-        cleanup_all_actors(client)
-        tm = get_or_create_tm(client, args.tm_port)
-
         # Configure synchronous mode if requested
         world = client.get_world()
-        if args.sync:
+
+        if sync:
             settings = world.get_settings()
             settings.synchronous_mode = True
-            settings.fixed_delta_seconds = min(1.0 / args.fps, 0.1)
+            settings.fixed_delta_seconds = 1.0 / args.fps
             world.apply_settings(settings)
             tm.set_synchronous_mode(True)
 
@@ -345,7 +357,7 @@ def run_episode(args):
         # if vehicle is None:
         #     raise RuntimeError("Failed to spawn ego vehicle")
         # vehicle.set_autopilot(True, tm.get_port())
-        vm = Vehicle(world, sync)
+        vm = Vehicle(world, sync, args.fps)
         vm.get_vehicle()
         if vm is None:
             raise RuntimeError("Failed to spawn ego vehicle")
@@ -375,20 +387,73 @@ def run_episode(args):
                 print(f"[WARN] Unknown sensor '{s}'")
         print("phase 4")
 
+        # Define scaling from world to screen coords
+        world_scale = 0.2  # meters to pixels
+        offset = np.array([args.width//2, args.height//2])
+        
 
         # Simulation loop
         client.start_recorder("recording.log")
         max_ticks = args.fps * 5
-        ticks = 0
-        while ticks < max_ticks:
-            print(ticks)
-            if args.sync:
-                world.tick()
+        # Main simulation loop
+        running = True
+        while running:
+            # Tick world
+            if sync:
+                vm.tick()
             else:
                 world.wait_for_tick()
-            ticks += 1
+
+            # Handle pygame events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+
+            # Get vehicle transform
+            transform = vm.ego_vehicle.get_transform()
+            loc = transform.location
+            rot = transform.rotation
+
+            # Convert to screen coordinates
+            car_pos = np.array([loc.x, -loc.y]) * world_scale + offset
+            car_angle = np.deg2rad(-rot.yaw)
+
+            # Clear screen
+            screen.fill((30, 30, 30))
+
+            # Draw vehicle as a rotated rectangle
+            car_width = 2.0 * world_scale
+            car_length = 4.0 * world_scale
+            rect = pygame.Surface((car_length, car_width), pygame.SRCALPHA)
+            pygame.draw.rect(rect, (200, 50, 50), rect.get_rect())
+            rotated = pygame.transform.rotate(rect, np.rad2deg(car_angle))
+            rect_center = rotated.get_rect(center=car_pos)
+            screen.blit(rotated, rect_center.topleft)
+
+            # Optionally visualize Lidar points in top-down view
+            pts = vm.get_latest_sensor_data('lidar')
+            if pts is not None:
+                # pts array shape: N x 4 (x,y,z,intensity)
+                for x, y, z, i in pts:
+                    px, py = (np.array([x, -y]) + np.array([loc.x, -loc.y])) * world_scale + offset
+                    screen.fill((50, 200, 50), (int(px), int(py), 2, 2))
+
+            # Display GNSS coordinate text
+            gnss = vm.get_latest_sensor_data('gnss')
+            if gnss:
+                font = pygame.font.SysFont(None, 24)
+                text = font.render(f"Lat: {gnss['latitude']:.6f} Lon: {gnss['longitude']:.6f}", True, (255,255,255))
+                screen.blit(text, (10, 10))
+
+            pygame.display.flip()
+            clock.tick(args.fps)
+
 
         return 0
+    
+    except KeyboardInterrupt:
+        print("Program interrupted by user. Exiting gracefully.")
 
     finally:
         # Always attempt cleanup, even after Python exceptions
@@ -396,7 +461,10 @@ def run_episode(args):
             try:
                 # Destroy actors
                 client.stop_recorder()
-                cleanup_all_actors(client)
+                pygame.quit()
+                cleanup_all_actors(client, world)
+                if vehicle:
+                    vehicle.reset()
                 # Restore world settings if sync
                 if args.sync:
                     world = client.get_world()
@@ -404,6 +472,7 @@ def run_episode(args):
                     settings.synchronous_mode = False
                     settings.fixed_delta_seconds = 0.0
                     world.apply_settings(settings)
+                print("Simulation ended.")
             except Exception as cleanup_err:
                 print(f"Cleanup error: {cleanup_err}")
 
@@ -423,10 +492,12 @@ def supervise(args):
             print(f"Episode crashed (exit code={exit_code}), performing global cleanup and restarting...")
             try:
                 client = connect_client(args.host, args.port)
-                cleanup_all_actors(client)
+                world = client.get_world()
+                cleanup_all_actors(client, world)
             except Exception as e:
                 print(f"Global cleanup failed: {e}")
             time.sleep(1)
+
 
 
 def parse_args():
@@ -436,15 +507,15 @@ def parse_args():
     parser.add_argument('--tm_port', type=int, default=8001)
     parser.add_argument('--sync', action='store_true')
     parser.add_argument('--fps', type=int, default=20)
+    parser.add_argument('--width', type=int, default=800)
+    parser.add_argument('--height', type=int, default=600)
     return parser.parse_args()
 
 
 if __name__ == '__main__':
-    try:
-        args = parse_args()
-        supervise(args)
-    except KeyboardInterrupt:
-        print("Program interrupted by user. Exiting gracefully.")
+    args = parse_args()
+    supervise(args)
+
 
     
 # def main():

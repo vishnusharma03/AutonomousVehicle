@@ -1,18 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
-
-
-# %load velocity_planner.py 
-#!/usr/bin/env python3
-
-# This work is licensed under the terms of the MIT license.
-# For a copy, see <https://opensource.org/licenses/MIT>.
-
-# Author: Ryan De Iaco
-# Additional Comments: Carlos Wang
-# Date: October 29, 2018
 
 import numpy as np
 from math import sin, cos, pi, sqrt
@@ -25,8 +13,6 @@ class VelocityPlanner:
         self._stop_line_buffer = stop_line_buffer
         self._prev_trajectory  = [[0.0, 0.0, 0.0]]
 
-    # Computes an open loop speed estimate based on the previously planned
-    # trajectory, and the timestep since the last planning cycle.
     # Input: timestep is in seconds
     def get_open_loop_speed(self, timestep):
         if len(self._prev_trajectory) == 1:
@@ -43,9 +29,6 @@ class VelocityPlanner:
             velocity = self._prev_trajectory[i][2]
             time_delta = distance_step / velocity
            
-            # If time_delta exceeds the remaining time in our simulation timestep, 
-            # interpolate between the velocity of the current step and the velocity
-            # of the next step to estimate the open loop velocity.
             if time_delta > timestep:
                 v1 = self._prev_trajectory[i][2]
                 v2 = self._prev_trajectory[i+1][2]
@@ -57,27 +40,10 @@ class VelocityPlanner:
             else:
                 timestep -= time_delta
 
-        # Simulation time step exceeded the length of the path, which means we have likely
-        # stopped. Return the end velocity of the trajectory.
+
         return self._prev_trajectory[-1][2]
 
-    ######################################################
-    ######################################################
-    # MODULE 7: COMPUTE VELOCITY PROFILE
-    #   Read over the function comments to familiarize yourself with the
-    ######################################################
-    ######################################################
-    # Takes a path, and computes a velocity profile to our desired speed.
-    # - decelerate_to_stop denotes whether or not we need to decelerate to a
-    #   stop line
-    # - follow_lead_vehicle denotes whether or not we need to follow a lead
-    #   vehicle, with state given by lead_car_state.
-    # The order of precedence for handling these cases is stop sign handling,
-    # lead vehicle handling, then nominal lane maintenance. In a real velocity
-    # planner you would need to handle the coupling between these states, but
-    # for simplicity this project can be implemented by isolating each case.
-    # For all profiles, the required acceleration is given by self._a_max.
-    # Recall that the path is of the form [x_points, y_points, t_points].
+    
     def compute_velocity_profile(self, path, desired_speed, ego_state, 
                                  closed_loop_speed, decelerate_to_stop, 
                                  lead_car_state, follow_lead_vehicle):
@@ -137,8 +103,6 @@ class VelocityPlanner:
         if decelerate_to_stop:
             profile = self.decelerate_profile(path, start_speed)
 
-        # If we need to follow the lead vehicle, make sure we decelerate to its
-        # speed by the time we reach the time gap point.
         elif follow_lead_vehicle:
             profile = self.follow_profile(path, start_speed, desired_speed, 
                                           lead_car_state)
@@ -148,8 +112,6 @@ class VelocityPlanner:
             profile = self.nominal_profile(path, start_speed, desired_speed)
 
         # Interpolate between the zeroth state and the first state.
-        # This prevents the myopic controller from getting stuck at the zeroth
-        # state.
         if len(profile) > 1:
             interpolated_state = [(profile[1][0] - profile[0][0]) * 0.1 + profile[0][0], 
                                   (profile[1][1] - profile[0][1]) * 0.1 + profile[0][1], 
@@ -202,10 +164,6 @@ class VelocityPlanner:
         slow_speed       = self._slow_speed
         stop_line_buffer = self._stop_line_buffer
 
-        # Using d = (v_f^2 - v_i^2) / (2 * a), compute the two distances
-        # used in the trapezoidal stop behaviour. decel_distance goes from
-        #  start_speed to some coasting speed (slow_speed), then brake_distance
-        #  goes from slow_speed to 0, both at a constant deceleration.
         decel_distance = calc_distance(start_speed, slow_speed, -self._a_max)
         brake_distance = calc_distance(slow_speed, 0, -self._a_max)
 
@@ -223,10 +181,6 @@ class VelocityPlanner:
                                          path[1][stop_index] - path[1][stop_index-1]])
             stop_index -= 1
 
-        # If the brake distance exceeds the length of the path, then we cannot
-        # perform a smooth deceleration and require a harder deceleration. Build
-        # the path up in reverse to ensure we reach zero speed at the required
-        # time.
         if brake_distance + decel_distance + stop_line_buffer > path_length:
             speeds = []
             vf = 0.0
@@ -251,11 +205,6 @@ class VelocityPlanner:
             for i in range(len(speeds)):
                 profile.append([path[0][i], path[1][i], speeds[i]])
             
-        # Otherwise, we will perform a full trapezoidal profile. The
-        # brake_index will be the index of the path at which we start
-        # braking, and the decel_index will be the index at which we stop
-        # decelerating to our slow_speed. These two indices denote the
-        # endpoints of the ramps in our trapezoidal profile.
         else:
             brake_index = stop_index 
             temp_dist = 0.0
@@ -264,11 +213,7 @@ class VelocityPlanner:
                 temp_dist += np.linalg.norm([path[0][brake_index] - path[0][brake_index-1], 
                                              path[1][brake_index] - path[1][brake_index-1]])
                 brake_index -= 1
-
-            # Compute the index to stop decelerating to the slow speed.  This is
-            # done by stepping through the points until accumulating
-            # decel_distance of distance to said index, starting from the the
-            # start of the path.       
+ 
             decel_index = 0
             temp_dist = 0.0
             while (decel_index < brake_index) and (temp_dist < decel_distance):
@@ -276,9 +221,6 @@ class VelocityPlanner:
                                              path[1][decel_index+1] - path[1][decel_index]])
                 decel_index += 1
 
-            # The speeds from the start to decel_index should be a linear ramp
-            # from the current speed down to the slow_speed, decelerating at
-            # -self._a_max.
             vi = start_speed
             for i in range(decel_index): 
                 dist = np.linalg.norm([path[0][i+1] - path[0][i], 
@@ -295,9 +237,6 @@ class VelocityPlanner:
             for i in range(decel_index, brake_index):
                 profile.append([path[0][i], path[1][i], vi])
                 
-            # The speeds from the brake_index to stop_index should be a
-            # linear ramp from the slow_speed down to the 0, decelerating at
-            # -self._a_max.
             for i in range(brake_index, stop_index):
                 dist = np.linalg.norm([path[0][i+1] - path[0][i], 
                                        path[1][i+1] - path[1][i]])
@@ -362,9 +301,6 @@ class VelocityPlanner:
                 min_dist = dist
                 min_index = i
 
-        # Compute the time gap point, assuming our velocity is held constant at
-        # the minimum of the desired speed and the ego vehicle's velocity, from
-        # the closest point to the lead vehicle on our planned path.
         desired_speed = min(lead_car_state[2], desired_speed)
         ramp_end_index = min_index
         distance = min_dist
@@ -374,9 +310,6 @@ class VelocityPlanner:
                                         path[1][ramp_end_index] - path[1][ramp_end_index-1]])
             ramp_end_index -= 1
 
-        # We now need to reach the ego vehicle's speed by the time we reach the
-        # time gap point, ramp_end_index, which therefore is the end of our ramp
-        # velocity profile.
         if desired_speed < start_speed:
             decel_distance = calc_distance(start_speed, desired_speed, -self._a_max)
         else:
@@ -396,9 +329,6 @@ class VelocityPlanner:
             profile.append([path[0][i], path[1][i], vi])
             vi = vf
 
-        # Once we hit the time gap point, we need to be at the desired speed.
-        # If we can't get there using a_max, do an abrupt change in the profile
-        # to use the controller to decelerate more quickly.
         for i in range(ramp_end_index + 1, len(path[0])):
             profile.append([path[0][i], path[1][i], desired_speed])
 
@@ -479,16 +409,8 @@ class VelocityPlanner:
 
         return profile
 
-######################################################
-######################################################
-# MODULE 7: COMPUTE TOTAL DISTANCE WITH CONSTANT ACCELERATION
-#   Read over the function comments to familiarize yourself with the
-#   arguments and necessary variables to return. Then follow the TODOs
-#   (top-down) and use the surrounding comments as a guide.
-######################################################
-######################################################
-# Using d = (v_f^2 - v_i^2) / (2 * a), compute the distance
-# required for a given acceleration/deceleration.
+
+
 def calc_distance(v_i, v_f, a):
     """Computes the distance given an initial and final speed, with a constant
     acceleration.
@@ -500,24 +422,12 @@ def calc_distance(v_i, v_f, a):
     returns:
         d: the final distance (m)
     """
-    # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-    # ------------------------------------------------------------------
+    
+
     d = (v_f**2 - v_i**2) / (2*a)
     return d
-    # ------------------------------------------------------------------
 
-######################################################
-######################################################
-# MODULE 7: COMPUTE FINAL SPEED WITH CONSTANT ACCELERATION
-#   Read over the function comments to familiarize yourself with the
-#   arguments and necessary variables to return. Then follow the TODOs
-#   (top-down) and use the surrounding comments as a guide.
-######################################################
-######################################################
-# Using v_f = sqrt(v_i^2 + 2ad), compute the final speed for a given
-# acceleration across a given distance, with initial speed v_i.
-# Make sure to check the discriminant of the radical. If it is negative,
-# return zero as the final speed.
+
 def calc_final_speed(v_i, a, d):
     """Computes the final speed given an initial speed, distance travelled, 
     and a constant acceleration.
@@ -529,10 +439,9 @@ def calc_final_speed(v_i, a, d):
     returns:
         v_f: the final speed (m/s)
     """
-    # TODO: INSERT YOUR CODE BETWEEN THE DASHED LINES
-    # ------------------------------------------------------------------
+    
     dist = v_i**2 + 2*a*d
     v_f = sqrt(dist) if dist > 0 else 0 
     return v_f 
-    # ------------------------------------------------------------------
+
 

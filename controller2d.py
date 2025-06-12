@@ -96,11 +96,6 @@ class Controller2D(object):
         steer_output    = 0
         brake_output    = 0
 
-        ######################################################
-        ######################################################
-        # MODULE 7: DECLARE USAGE VARIABLES HERE
-        ######################################################
-        ######################################################
         """
             Use 'self.vars.create_var(<variable name>, <default value>)'
             to create a persistent variable (not destroyed at each iteration).
@@ -156,11 +151,6 @@ class Controller2D(object):
                     brake_output    : Brake output (0 to 1)
             """
 
-            ######################################################
-            ######################################################
-            # MODULE 7: IMPLEMENTATION OF LONGITUDINAL CONTROLLER HERE
-            ######################################################
-            ######################################################
             """
                 Implement a longitudinal controller here. Remember that you can
                 access the persistent variables declared above here. For
@@ -205,27 +195,6 @@ class Controller2D(object):
                 u_sat = u
             
             throttle_output = np.clip(u_sat, u_min, u_max)
-            # if u_sat > 0:
-            #     throttle_output = (np.tanh(u_sat) + 1)/2
-            #     if throttle_output - self.vars.throttle_previous > 0.1:
-            #         throttle_output = self.vars.throttle_previous + 0.1
-            # else:
-            #     throttle_output = 0
-
-
-            #### Custom Implementaion ends
-
-            # Change these outputs with the longitudinal controller. Note that
-            # brake_output is optional and is not required to pass the
-            # assignment, as the car will naturally slow down over time.
-            # throttle_output = 0
-            # brake_output    = 0
-
-            ######################################################
-            ######################################################
-            # MODULE 7: IMPLEMENTATION OF LATERAL CONTROLLER HERE
-            ######################################################
-            ######################################################
             """
                 Implement a lateral controller here. Remember that you can
                 access the persistent variables declared above here. For
@@ -273,18 +242,11 @@ class Controller2D(object):
             # Change the steer output with the lateral controller. 
             steer_output    = np.clip(steer_angle, -1.22, 1.22)
 
-            ######################################################
-            # SET CONTROLS OUTPUT
-            ######################################################
+
             self.set_throttle(throttle_output)  # in percent (0 to 1)
             self.set_steer(steer_output)        # in rad (-1.22 to 1.22)
             self.set_brake(brake_output)        # in percent (0 to 1)
 
-        ######################################################
-        ######################################################
-        # MODULE 7: STORE OLD VALUES HERE (ADD MORE IF NECESSARY)
-        ######################################################
-        ######################################################
         """
             Use this block to store old values (for example, we can store the
             current x, y, and yaw values here using persistent variables for use
@@ -295,6 +257,4 @@ class Controller2D(object):
         self.vars.error_term_prev = error_term
         self.vars.integral_sum_prev = integral_sum
         self.vars.throttle_previous = throttle_output   
-        #### Custom Implementaion starts
 
-        #### Custom Implementaion ends

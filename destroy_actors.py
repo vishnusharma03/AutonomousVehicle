@@ -44,7 +44,7 @@ def reset_world_settings(client):
 if __name__ == '__main__':
     # 1. Clean actors (vehicles & sensors)
     cleanup_all_actors(client)
-
+    client.stop_recorder()
     # 2. Reset world settings (sync off)
     reset_world_settings(client)
 
